@@ -1,17 +1,17 @@
-//
-//  hestrel_iosApp.swift
-//  hestrel-ios
-//
-//  Created by Michal Jach on 05/10/2026.
-//
-
+import ComposableArchitecture
 import SwiftUI
+import GoogleSignIn
 
 @main
-struct hestrel_iosApp: App {
+struct HestrelApp: App {
+    @MainActor static let store = Store(initialState: AppFeature.State()) {
+        AppFeature()
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AppView(store: Self.store)
+                .onOpenURL { GIDSignIn.sharedInstance.handle($0) }
         }
     }
 }
