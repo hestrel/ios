@@ -1,0 +1,5 @@
+// Public OAuth client configuration. See GOOGLE_SETUP.md.
+// Values may be overridden by Config/Google.local.xcconfig (not committed).
+GOOGLE_CLIENT_ID =
+GOOGLE_REVERSED_CLIENT_ID = hestrel-google-unconfigured
+#include? "Google.local.xcconfig"
