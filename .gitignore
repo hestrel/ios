@@ -1,0 +1,5 @@
+.DS_Store
+xcuserdata/
+
+# Local Google OAuth client ID (see Config/GOOGLE_SETUP.md)
+Config/Google.local.xcconfig

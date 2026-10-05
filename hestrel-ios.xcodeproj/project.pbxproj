@@ -6,8 +6,15 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		826649E53073F57A00C1DF42 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 826649E43073F57A00C1DF42 /* ComposableArchitecture */; };
+		C01000000000000000000003 /* OpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = C01000000000000000000002 /* OpenAI */; };
+		C02000000000000000000003 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = C02000000000000000000002 /* GoogleSignIn */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		826649D53073F54B00C1DF42 /* hestrel-ios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "hestrel-ios.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C02000000000000000000004 /* Config/Google.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Google.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -22,6 +29,9 @@
 		826649D23073F54B00C1DF42 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				C02000000000000000000003 /* GoogleSignIn in Frameworks */,
+				C01000000000000000000003 /* OpenAI in Frameworks */,
+				826649E53073F57A00C1DF42 /* ComposableArchitecture in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -32,6 +42,7 @@
 			children = (
 				826649D73073F54B00C1DF42 /* hestrel-ios */,
 				826649D63073F54B00C1DF42 /* Products */,
+				82665D0B30742D1000C1DF42 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -41,6 +52,14 @@
 				826649D53073F54B00C1DF42 /* hestrel-ios.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		82665D0B30742D1000C1DF42 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				C02000000000000000000004 /* Config/Google.xcconfig */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -60,6 +79,11 @@
 				826649D73073F54B00C1DF42 /* hestrel-ios */,
 			);
 			name = "hestrel-ios";
+			packageProductDependencies = (
+				C02000000000000000000002 /* GoogleSignIn */,
+				C01000000000000000000002 /* OpenAI */,
+				826649E43073F57A00C1DF42 /* ComposableArchitecture */,
+			);
 			productName = "hestrel-ios";
 			productReference = 826649D53073F54B00C1DF42 /* hestrel-ios.app */;
 			productType = "com.apple.product-type.application";
@@ -88,6 +112,11 @@
 			);
 			mainGroup = 826649CC3073F54B00C1DF42;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C02000000000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				C01000000000000000000001 /* XCRemoteSwiftPackageReference "OpenAI" */,
+				826649E33073F57A00C1DF42 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 826649D63073F54B00C1DF42 /* Products */;
 			projectDirPath = "";
@@ -238,14 +267,20 @@
 		};
 		826649E13073F54E00C1DF42 /* Debug configuration for PBXNativeTarget "hestrel-ios" */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C02000000000000000000004 /* Config/Google.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Config/hestrel-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = A6GVRYGG7C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Hestrel;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to share with the assistant.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Hestrel connects to Ollama and other model servers on your local network.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -270,14 +305,20 @@
 		};
 		826649E23073F54E00C1DF42 /* Release configuration for PBXNativeTarget "hestrel-ios" */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C02000000000000000000004 /* Config/Google.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Config/hestrel-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = A6GVRYGG7C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Hestrel;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to share with the assistant.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Hestrel connects to Ollama and other model servers on your local network.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -320,6 +361,51 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		826649E33073F57A00C1DF42 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-composable-architecture";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.26.2;
+			};
+		};
+		C01000000000000000000001 /* XCRemoteSwiftPackageReference "OpenAI" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/MacPaw/OpenAI";
+			requirement = {
+				kind = exactVersion;
+				version = 0.5.1;
+			};
+		};
+		C02000000000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = exactVersion;
+				version = 9.2.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		826649E43073F57A00C1DF42 /* ComposableArchitecture */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 826649E33073F57A00C1DF42 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */;
+			productName = ComposableArchitecture;
+		};
+		C01000000000000000000002 /* OpenAI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C01000000000000000000001 /* XCRemoteSwiftPackageReference "OpenAI" */;
+			productName = OpenAI;
+		};
+		C02000000000000000000002 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C02000000000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 826649CD3073F54B00C1DF42 /* Project object */;
 	validationLevel = 1;
