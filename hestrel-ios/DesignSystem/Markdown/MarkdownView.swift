@@ -28,6 +28,9 @@ struct MarkdownView: View {
         case let .code(language, code):
             CodeBlockView(language: language, code: code)
 
+        case let .image(alt, url):
+            MarkdownImageView(alt: alt, url: url)
+
         case let .list(items):
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in

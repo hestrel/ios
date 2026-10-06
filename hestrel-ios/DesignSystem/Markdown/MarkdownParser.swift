@@ -10,6 +10,8 @@ nonisolated enum MarkdownBlock: Equatable {
     case heading(level: Int, text: String)
     case paragraph(String)
     case code(language: String?, code: String)
+    /// A line that is only a Markdown image, `![alt](url)`.
+    case image(alt: String, url: String)
     case list([ListItem])
     case quote(String)
     case table(header: [String], rows: [[String]])
@@ -41,6 +43,9 @@ nonisolated struct MarkdownParser {
                 parseCodeBlock(opening: trimmed)
             } else if trimmed.isEmpty {
                 flush()
+            } else if let image = Self.image(in: trimmed) {
+                flush()
+                blocks.append(image)
             } else if let heading = Self.heading(in: trimmed) {
                 flush()
                 blocks.append(heading)
@@ -119,6 +124,14 @@ nonisolated struct MarkdownParser {
     }
 
     // MARK: Line classification
+
+    /// `![alt](url)` or `![alt](url "title")` on a line of its own.
+    private static func image(in line: String) -> MarkdownBlock? {
+        guard line.hasPrefix("!["),
+              let match = line.wholeMatch(of: /!\[([^\]]*)\]\(\s*<?([^\s)>]+)>?(?:\s+"[^"]*")?\s*\)/)
+        else { return nil }
+        return .image(alt: String(match.1), url: String(match.2))
+    }
 
     private static func heading(in line: String) -> MarkdownBlock? {
         let hashes = line.prefix { $0 == "#" }.count
