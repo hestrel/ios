@@ -42,22 +42,15 @@ struct SidebarView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // A floating bar: chats scroll underneath, behind the system's soft edge effect.
+        .safeAreaBar(edge: .bottom, spacing: 0) {
             HStack {
-                Button {
-                    store.send(.accountTapped)
-                } label: {
-                    AccountAvatar(email: store.account?.email)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Account settings")
-                .accessibilityValue(store.account?.email ?? (store.account == nil ? "Signed out" : "Signed in"))
+                accountButton
                 Spacer()
                 newChatButton
             }
             .padding(.horizontal, Self.rowInsets.leading)
             .padding(.vertical, Theme.Spacing.small)
-            .background(Color(.systemBackground))
         }
         .background(Color(.systemBackground).ignoresSafeArea())
         .alert($store.scope(state: \.alert, action: \.alert))
@@ -149,17 +142,30 @@ struct SidebarView: View {
             .padding(.horizontal, Self.highlightInset)
     }
 
+    /// A standard large glass circle, matching the New chat pill's standard height.
+    private var accountButton: some View {
+        Button {
+            store.send(.accountTapped)
+        } label: {
+            AccountAvatar(email: store.account?.email, size: nil)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .accessibilityLabel("Account settings")
+        .accessibilityValue(store.account?.email ?? (store.account == nil ? "Signed out" : "Signed in"))
+    }
+
     private var newChatButton: some View {
         Button {
             store.send(.newChatTapped)
         } label: {
             Label("New chat", systemImage: "plus")
-                .font(.callout.weight(.semibold))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
+                .fontWeight(.semibold)
         }
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.capsule)
+        .controlSize(.large)
         .tint(.primary)
         .foregroundStyle(Color(.systemBackground))
     }

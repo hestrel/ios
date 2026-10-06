@@ -37,6 +37,8 @@ struct DrawerContainer<Drawer: View, Content: View>: View {
             }
         }
         .animation(.snappy(duration: 0.3), value: isOpen)
+        // The system's light tap as the drawer settles open or closed, whether by swipe or button.
+        .sensoryFeedback(.impact(weight: .light), trigger: isOpen)
         .onChange(of: isOpen) { _, isOpen in
             if isOpen { dismissKeyboard() }
         }
