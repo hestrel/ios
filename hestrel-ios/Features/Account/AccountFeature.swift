@@ -221,7 +221,9 @@ struct AccountFeature {
     /// Cleans up what another device deleted: MCP servers and keys of removed providers, and image files.
     private func removeLeftovers(of report: SyncReport, state: inout State) -> Effect<Action> {
         guard !report.removedProviderIDs.isEmpty || !report.removedAttachments.isEmpty else { return .none }
-        let orphanedServers = state.mcpServers.filter { report.removedProviderIDs.contains($0.providerID) }.map(\.id)
+        let orphanedServers = state.mcpServers.filter { server in
+            server.providerID.map(report.removedProviderIDs.contains) ?? false
+        }.map(\.id)
         if !orphanedServers.isEmpty {
             state.$mcpServers.withLock { servers in orphanedServers.forEach { servers.remove(id: $0) } }
         }

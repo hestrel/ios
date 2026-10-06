@@ -30,6 +30,9 @@ struct AppFeature {
         var path = StackState<Path.State>()
         var isSidebarOpen = false
         @Presents var settings: SettingsFeature.State?
+        @Presents var pairing: PairComputerFeature.State?
+        @Shared(.account) var signedInAccount: Account?
+        @Shared(.computers) var computers: IdentifiedArrayOf<Computer>
         @Shared(.providers) var providers: IdentifiedArrayOf<Provider>
         @Shared(.modelCatalog) var catalog: ModelCatalog
         @Shared(.mcpServers) var mcpServers: IdentifiedArrayOf<MCPServer>
@@ -49,6 +52,12 @@ struct AppFeature {
         case path(StackActionOf<Path>)
         case refresh
         case refreshTools
+        case becameActive
+        case computersLoaded(Result<[Computer], any Error>)
+        case openURL(URL)
+        case pairComputer(code: String?)
+        case pairing(PresentationAction<PairComputerFeature.Action>)
+        case refreshComputers
         case settings(PresentationAction<SettingsFeature.Action>)
         case sidebar(SidebarFeature.Action)
         case sidebarButtonTapped
@@ -57,14 +66,17 @@ struct AppFeature {
     }
 
     nonisolated enum CancelID: Hashable {
+        case computers
         case discovery(Provider.ID)
         case models(Provider.ID)
         case tools(MCPServer.ID)
     }
 
     @Dependency(\.credentials) var credentials
+    @Dependency(\.hestrelAPI) var api
     @Dependency(\.llm) var llm
     @Dependency(\.mcp) var mcp
+    @Dependency(\.mcpAuth) var mcpAuth
     @Dependency(\.uuid) var uuid
 
     var body: some Reducer<State, Action> {
@@ -102,13 +114,64 @@ struct AppFeature {
                 if let open = state.chat.conversationID, report.removedConversationIDs.contains(open) {
                     effects.append(startNewConversation(.chat, state: &state))
                 }
-                if report.providersChanged {
-                    effects.append(.send(.refresh))
-                }
+                // Computers paired on another device show up with the account's other changes.
+                effects.append(report.providersChanged ? .send(.refresh) : .send(.refreshComputers))
                 return .merge(effects)
+
+            case .account(.signOut), .account(.deleteAccountFinished(.success)):
+                return .send(.computersLoaded(.success([])))
 
             case .account:
                 return .none
+
+            case .becameActive:
+                // Computers come and go while Hestrel is in the background.
+                return .send(.refreshComputers)
+
+            case let .computersLoaded(.success(computers)):
+                // A computer that just came online has agents to offer, which failed to load while it was away.
+                let cameOnline = computers.contains { computer in computer.online && state.computers[id: computer.id]?.online != true }
+                state.$computers.withLock { $0 = IdentifiedArray(uniqueElements: computers) }
+                let serversChanged = mergeComputerServers(computers, state: &state)
+                return serversChanged || cameOnline ? .send(.refreshTools) : .none
+
+            case .computersLoaded(.failure):
+                // Offline or signed out elsewhere: keep what's known until the next refresh.
+                return .none
+
+            case let .openURL(url):
+                guard url.scheme?.lowercased() == "hestrel", url.host()?.lowercased() == "pair" else { return .none }
+                return .send(.pairComputer(code: PairingLink.code(from: url.absoluteString)))
+
+            case let .pairComputer(code):
+                state.settings = nil
+                state.isSidebarOpen = false
+                state.pairing = PairComputerFeature.State(code: code)
+                return .none
+
+            case let .pairing(.presented(.delegate(.paired(computer)))):
+                var computers = state.computers
+                computers[id: computer.id] = computer
+                return .send(.computersLoaded(.success(Array(computers))))
+
+            case .pairing(.presented(.delegate(.openAccount))):
+                state.pairing = nil
+                state.settings = SettingsFeature.State(path: [.account])
+                return .none
+
+            case .pairing:
+                return .none
+
+            case .refreshComputers:
+                guard state.signedInAccount != nil else { return .send(.computersLoaded(.success([]))) }
+                return .run { [api, credentials] send in
+                    let result = await Result {
+                        guard let token = credentials.secret(id: Account.sessionTokenID) else { throw HestrelAPIError.unauthorized }
+                        return try await api.listComputers(token: token)
+                    }
+                    await send(.computersLoaded(result))
+                }
+                .cancellable(id: CancelID.computers, cancelInFlight: true)
 
             case let .artifacts(.delegate(.artifactSelected(artifact))):
                 state.path.append(.artifactDetail(ArtifactDetailFeature.State(artifact: artifact)))
@@ -123,9 +186,16 @@ struct AppFeature {
                     state.sidebar.selectedConversationID = id
                     state.sidebar.activeDestination = nil
                     return .none
+                case .openPlugins:
+                    show(.plugins, state: &state)
+                    return .none
                 case .openSettings:
                     state.settings = SettingsFeature.State()
                     return .none
+                case .pairComputer:
+                    return .send(.pairComputer(code: nil))
+                case .refreshComputers:
+                    return .send(.refreshComputers)
                 }
 
             case .chat:
@@ -157,6 +227,10 @@ struct AppFeature {
                 switch delegate {
                 case .mcpServersChanged:
                     return .send(.refresh)
+                case .pairComputer:
+                    return .send(.pairComputer(code: nil))
+                case .refreshComputers:
+                    return .send(.refreshComputers)
                 case .openSettings:
                     state.settings = SettingsFeature.State()
                     return .none
@@ -192,8 +266,12 @@ struct AppFeature {
             case .path:
                 return .none
 
-            case .refresh, .task:
-                return .merge(refreshModels(&state), discoverHostServers(&state), .send(.refreshTools))
+            case .task:
+                // Replies still running on a computer when the app last quit carry on where they are.
+                return .merge(.send(.refresh), .send(.chat(.resumePendingTurns)))
+
+            case .refresh:
+                return .merge(refreshModels(&state), discoverHostServers(&state), .send(.refreshTools), .send(.refreshComputers))
 
             case .refreshTools:
                 return refreshTools(&state)
@@ -276,6 +354,9 @@ struct AppFeature {
         .ifLet(\.$settings, action: \.settings) {
             SettingsFeature()
         }
+        .ifLet(\.$pairing, action: \.pairing) {
+            PairComputerFeature()
+        }
     }
 
     // MARK: Navigation
@@ -316,6 +397,22 @@ struct AppFeature {
 
     // MARK: Loading
 
+    /// Keeps one MCP server per paired computer, enabled from the start. Returns whether anything changed.
+    private func mergeComputerServers(_ computers: [Computer], state: inout State) -> Bool {
+        let before = state.mcpServers.filter { $0.origin == .computer }
+        state.$mcpServers.withLock { servers in
+            servers.removeAll { $0.origin == .computer && !computers.map(\.id).contains($0.id) }
+            for computer in computers {
+                if let existing = servers[id: computer.id] {
+                    servers[id: computer.id] = .computer(computer, isEnabled: existing.isEnabled)
+                } else {
+                    servers.append(.computer(computer))
+                }
+            }
+        }
+        return before != state.mcpServers.filter { $0.origin == .computer }
+    }
+
     /// Re-fetches the model list of every enabled provider in parallel.
     private func refreshModels(_ state: inout State) -> Effect<Action> {
         let providers = state.providers.filter(\.isEnabled)
@@ -342,7 +439,9 @@ struct AppFeature {
 
         // Hosts that stopped publishing servers take their inherited servers with them.
         state.$mcpServers.withLock { servers in
-            servers.removeAll { $0.origin == .host && !hostIDs.contains($0.providerID) }
+            servers.removeAll { server in
+                server.origin == .host && !(server.providerID.map(hostIDs.contains) ?? false)
+            }
         }
         state.$toolCatalog.withLock { catalog in
             for provider in state.providers {
@@ -389,14 +488,18 @@ struct AppFeature {
     /// Lists the tools of every enabled MCP server in parallel.
     private func refreshTools(_ state: inout State) -> Effect<Action> {
         let enabledProviders = Set(state.providers.filter(\.isEnabled).ids)
-        let servers = state.mcpServers.filter { $0.isEnabled && enabledProviders.contains($0.providerID) }
+        // Servers for every provider (connectors) load whenever they're on.
+        let servers = state.mcpServers.filter { server in
+            server.isEnabled && (server.providerID.map(enabledProviders.contains) ?? true)
+        }
         state.$toolCatalog.withLock { $0.beginLoading(Set(servers.ids)) }
 
         return .merge(
             servers.map { server in
-                .run { [credentials, mcp] send in
-                    let headers = server.authHeaders(token: credentials.secret(id: server.id))
-                    let result = await Result { try await mcp.listTools(server: server, headers: headers) }
+                .run { [mcp, mcpAuth] send in
+                    let result = await Result {
+                        try await mcp.listTools(server: server, headers: mcpAuth.headers(server: server))
+                    }
                     await send(.toolsLoaded(result, for: server.id))
                 }
                 .cancellable(id: CancelID.tools(server.id), cancelInFlight: true)

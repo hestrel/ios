@@ -5,6 +5,8 @@ struct MessageRow: View {
     let message: Message
     let isStreaming: Bool
     let isLast: Bool
+    /// Copy and regenerate go under the last message of a reply, which may span several messages.
+    var showsActions = true
     let onRegenerate: () -> Void
 
     var body: some View {
@@ -51,7 +53,11 @@ struct MessageRow: View {
             }
 
             ForEach(message.toolCalls) { call in
-                ToolCallView(call: call, isRunning: isStreaming && call.result == nil)
+                if let step = AgentStep(call) {
+                    AgentStepView(call: call, step: step, isRunning: isStreaming && call.result == nil)
+                } else {
+                    ToolCallView(call: call, isRunning: isStreaming && call.result == nil)
+                }
             }
 
             if !display.answer.isEmpty {
@@ -67,7 +73,7 @@ struct MessageRow: View {
                 ErrorBanner(message: error, onRetry: isLast ? onRegenerate : nil)
             }
 
-            if !isStreaming && !display.answer.isEmpty {
+            if showsActions && !isStreaming && !display.answer.isEmpty {
                 actions(answer: display.answer)
             }
         }

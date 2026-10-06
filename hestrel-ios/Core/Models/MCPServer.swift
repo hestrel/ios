@@ -2,18 +2,24 @@ import Foundation
 
 /// A remote Model Context Protocol server reached over Streamable HTTP.
 ///
-/// Every server belongs to a provider (its "host"). Servers are either added by hand, with an
-/// optional bearer token kept in the Keychain, or inherited from the host's own `mcp.json`.
+/// A server either belongs to one provider (its "host") or, with no provider, works with all of them.
+/// Servers are added by hand, connected from the connector directory, or inherited from a host's
+/// `mcp.json`. Credentials (a token or an OAuth session) live in the Keychain.
 nonisolated struct MCPServer: Codable, Equatable, Identifiable, Sendable {
     enum Origin: String, Codable, Sendable {
         /// Added by the user in Settings.
         case manual
         /// Discovered from the provider host's MCP configuration.
         case host
+        /// A computer paired with the Hestrel account, reached through Hestrel's relay with the account's session.
+        case computer
     }
 
     let id: UUID
-    var providerID: Provider.ID
+    /// `nil` for servers that work with every provider, such as connectors.
+    var providerID: Provider.ID?
+    /// The directory entry this server was connected from, if any.
+    var connectorID: Connector.ID?
     var name: String
     var url: String
     var isEnabled: Bool
@@ -23,7 +29,8 @@ nonisolated struct MCPServer: Codable, Equatable, Identifiable, Sendable {
 
     init(
         id: UUID,
-        providerID: Provider.ID,
+        providerID: Provider.ID?,
+        connectorID: Connector.ID? = nil,
         name: String = "",
         url: String = "",
         isEnabled: Bool = true,
@@ -32,6 +39,7 @@ nonisolated struct MCPServer: Codable, Equatable, Identifiable, Sendable {
     ) {
         self.id = id
         self.providerID = providerID
+        self.connectorID = connectorID
         self.name = name
         self.url = url
         self.isEnabled = isEnabled
@@ -46,6 +54,13 @@ nonisolated struct MCPServer: Codable, Equatable, Identifiable, Sendable {
 
     var displayHost: String {
         URL(string: url)?.host() ?? url
+    }
+
+    var connector: Connector? { Connector.named(connectorID) }
+
+    /// Whether the server's tools are offered when chatting with this provider.
+    func isAvailable(to providerID: Provider.ID) -> Bool {
+        self.providerID == nil || self.providerID == providerID
     }
 }
 

@@ -11,6 +11,8 @@ struct ComposerView: View {
     @State private var isPhotoPickerPresented = false
     @State private var isCameraPresented = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
+    @State private var isFolderPromptPresented = false
+    @State private var folderDraft = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -18,15 +20,21 @@ struct ComposerView: View {
                 attachmentStrip
             }
 
-            TextField(store.kind == .code ? "Describe what to build" : "Chat with Hestrel", text: $store.draft, axis: .vertical)
+            TextField(store.kind == .code ? "Ask \(store.codeAgent.title) to…" : "Chat with Hestrel", text: $store.draft, axis: .vertical)
                 .lineLimit(1...8)
                 .focused(isFocused)
                 .padding(.horizontal, Theme.Spacing.xSmall)
 
             HStack(spacing: Theme.Spacing.small) {
-                attachMenu
-                Spacer(minLength: 0)
-                modelMenu
+                if store.kind == .code {
+                    folderButton
+                    Spacer(minLength: 0)
+                    codeModelButton
+                } else {
+                    attachMenu
+                    Spacer(minLength: 0)
+                    modelMenu
+                }
                 sendButton
             }
         }
@@ -38,7 +46,11 @@ struct ComposerView: View {
         .padding(.horizontal, Theme.Spacing.medium)
         .padding(.bottom, Theme.Spacing.small)
         .sheet(isPresented: $store.isModelPickerPresented, onDismiss: { store.send(.modelPickerDismissed) }) {
-            ModelSelectionView(store: store)
+            if store.kind == .code {
+                CodeSettingsView(store: store)
+            } else {
+                ModelSelectionView(store: store)
+            }
         }
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
@@ -110,6 +122,75 @@ struct ComposerView: View {
                 .background(Color.fill, in: .circle)
         }
         .accessibilityLabel("Add attachment")
+    }
+
+    // MARK: Code session
+
+    /// Where the agent works; chosen before the session starts, then shown for reference.
+    private var folderButton: some View {
+        let folder = store.codeFolder
+        let name = folder.isEmpty ? "Default folder" : (folder as NSString).lastPathComponent
+        return Button {
+            folderDraft = folder
+            isFolderPromptPresented = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "folder")
+                Text(name)
+                    .lineLimit(1)
+                if store.canChangeCodeSettings {
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                }
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, Theme.Spacing.small)
+            .frame(minHeight: 44)
+            .contentShape(.rect)
+        }
+        .disabled(!store.canChangeCodeSettings)
+        .accessibilityLabel("Working folder")
+        .accessibilityValue(folder.isEmpty ? "Default" : folder)
+        .alert("Working Folder", isPresented: $isFolderPromptPresented) {
+            TextField("~/dev/my-app", text: $folderDraft)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("Use Folder") { store.send(.codeFolderChanged(folderDraft)) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The folder on your computer \(store.codeAgent.title) works in. Leave it empty to use the folder the bridge was started in.")
+        }
+    }
+
+    /// The agent, its model and effort; like the folder, fixed once the session starts.
+    private var codeModelButton: some View {
+        Button {
+            isFocused.wrappedValue = false
+            store.send(.modelPickerTapped)
+        } label: {
+            HStack(spacing: 4) {
+                Text(store.codeModelTitle)
+                    .lineLimit(1)
+                if store.codeEffort != .auto {
+                    Text("· \(store.codeEffort.title)")
+                        .foregroundStyle(.tertiary)
+                        .fixedSize()
+                }
+                if store.canChangeCodeSettings {
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                }
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, Theme.Spacing.small)
+            .frame(minHeight: 44)
+            .contentShape(.rect)
+        }
+        .disabled(!store.canChangeCodeSettings)
+        .accessibilityLabel("Agent and model")
+        .accessibilityValue(store.codeEffort == .auto ? store.codeModelTitle : "\(store.codeModelTitle), \(store.codeEffort.title) effort")
     }
 
     // MARK: Model

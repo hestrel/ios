@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct EmptyChatView: View {
-    let kind: Conversation.Kind
     let hasModels: Bool
     let onSuggestion: (String) -> Void
     let onOpenSettings: () -> Void
@@ -10,20 +9,14 @@ struct EmptyChatView: View {
         VStack(spacing: 0) {
             Spacer()
             if hasModels {
-                VStack(spacing: Theme.Spacing.medium) {
-                    if kind == .code {
-                        Image(systemName: "chevron.left.forwardslash.chevron.right")
-                            .font(.system(size: 32, weight: .light))
-                    }
-                    Text(kind == .code ? "What are we building?" : "What can I help with?")
-                        .font(.title2.weight(.semibold))
-                }
+                Text("What can I help with?")
+                    .font(.title2.weight(.semibold))
             } else {
                 onboarding
             }
             Spacer()
             if hasModels {
-                suggestions
+                SuggestionStrip(suggestions: Suggestion.chat, onSelect: onSuggestion)
             }
         }
     }
@@ -46,13 +39,19 @@ struct EmptyChatView: View {
         }
         .padding(.horizontal, 40)
     }
+}
 
-    private var suggestions: some View {
+/// Starter prompts in a horizontal row above the composer.
+struct SuggestionStrip: View {
+    let suggestions: [Suggestion]
+    let onSelect: (String) -> Void
+
+    var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.Spacing.small) {
-                ForEach(Suggestion.all(for: kind)) { suggestion in
+                ForEach(suggestions) { suggestion in
                     Button {
-                        onSuggestion(suggestion.prompt)
+                        onSelect(suggestion.prompt)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(suggestion.title)
@@ -75,28 +74,23 @@ struct EmptyChatView: View {
     }
 }
 
-private struct Suggestion: Identifiable {
+struct Suggestion: Identifiable {
     let title: String
     let subtitle: String
     let prompt: String
     var id: String { title }
 
-    static func all(for kind: Conversation.Kind) -> [Suggestion] {
-        switch kind {
-        case .chat:
-            [
-                Suggestion(title: "Explain", subtitle: "how a transformer works", prompt: "Explain how a transformer neural network works, in simple terms."),
-                Suggestion(title: "Write", subtitle: "a polite follow-up email", prompt: "Write a short, polite follow-up email to a recruiter I haven't heard back from."),
-                Suggestion(title: "Plan", subtitle: "a weekend in Lisbon", prompt: "Plan a relaxed two-day weekend itinerary in Lisbon."),
-                Suggestion(title: "Debug", subtitle: "a Swift concurrency error", prompt: "What does \"Sending value risks causing data races\" mean in Swift 6, and how do I fix it?"),
-            ]
-        case .code:
-            [
-                Suggestion(title: "Build", subtitle: "a landing page in HTML", prompt: "Build a single-file, responsive landing page in HTML and CSS for a minimalist note-taking app."),
-                Suggestion(title: "Write", subtitle: "a SwiftUI view", prompt: "Write a SwiftUI view that shows a searchable list of contacts with sections by first letter."),
-                Suggestion(title: "Refactor", subtitle: "callbacks to async/await", prompt: "Show how to refactor a completion-handler based networking function to async/await in Swift."),
-                Suggestion(title: "Script", subtitle: "a file renamer in Python", prompt: "Write a Python script that renames photos in a folder by their EXIF date."),
-            ]
-        }
-    }
+    static let chat = [
+        Suggestion(title: "Explain", subtitle: "how a transformer works", prompt: "Explain how a transformer neural network works, in simple terms."),
+        Suggestion(title: "Write", subtitle: "a polite follow-up email", prompt: "Write a short, polite follow-up email to a recruiter I haven't heard back from."),
+        Suggestion(title: "Plan", subtitle: "a weekend in Lisbon", prompt: "Plan a relaxed two-day weekend itinerary in Lisbon."),
+        Suggestion(title: "Debug", subtitle: "a Swift concurrency error", prompt: "What does \"Sending value risks causing data races\" mean in Swift 6, and how do I fix it?"),
+    ]
+
+    static let code = [
+        Suggestion(title: "Explain", subtitle: "how this project is organized", prompt: "Give me a short tour of this project: what it does, how it's organized, and where to start reading."),
+        Suggestion(title: "Review", subtitle: "my uncommitted changes", prompt: "Review my uncommitted changes. Point out bugs and anything that looks unfinished. Don't change any files."),
+        Suggestion(title: "Fix", subtitle: "the failing tests", prompt: "Run the tests, find out why any are failing, and fix them."),
+        Suggestion(title: "Find", subtitle: "TODOs worth doing", prompt: "Find the TODO and FIXME comments in this project and suggest which three are most worth doing."),
+    ]
 }

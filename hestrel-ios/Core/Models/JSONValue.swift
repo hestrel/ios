@@ -48,6 +48,11 @@ nonisolated enum JSONValue: Codable, Equatable, Hashable, Sendable {
         return value
     }
 
+    var numberValue: Double? {
+        guard case let .number(value) = self else { return nil }
+        return value
+    }
+
     var boolValue: Bool? {
         guard case let .bool(value) = self else { return nil }
         return value

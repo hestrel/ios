@@ -10,6 +10,14 @@
 				<string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>me.jach.hestrel-ios.pair</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>hestrel</string>
+			</array>
+		</dict>
 	</array>
 	<key>GIDClientID</key>
 	<string>$(GOOGLE_CLIENT_ID)</string>

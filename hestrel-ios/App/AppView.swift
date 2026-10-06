@@ -7,6 +7,8 @@ struct AppView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some View {
         Group {
             if horizontalSizeClass == .regular {
@@ -18,8 +20,14 @@ struct AppView: View {
         .tint(.primary)
         .task { await store.send(.task).finish() }
         .task { await store.send(.account(.task)).finish() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { store.send(.becameActive) }
+        }
         .sheet(item: $store.scope(state: \.settings, action: \.settings)) { settingsStore in
             SettingsView(store: settingsStore)
+        }
+        .sheet(item: $store.scope(state: \.pairing, action: \.pairing)) { pairingStore in
+            PairComputerView(store: pairingStore)
         }
     }
 

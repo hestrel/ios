@@ -9,6 +9,10 @@ nonisolated struct HestrelAPIClient: Sendable {
     var deleteAccount: @Sendable (_ token: String, _ authorizationCode: String?) async throws -> Void
     var push: @Sendable (_ token: String, _ changes: [SyncChange]) async throws -> PushResponse
     var pull: @Sendable (_ token: String, _ cursor: Int) async throws -> PullResponse
+    /// Computers paired with the account, whose coding agents its devices reach through the relay.
+    var listComputers: @Sendable (_ token: String) async throws -> [Computer]
+    var claimComputer: @Sendable (_ token: String, _ code: String) async throws -> Computer
+    var removeComputer: @Sendable (_ token: String, _ id: Computer.ID) async throws -> Void
 }
 
 nonisolated struct SignInResponse: Decodable, Sendable {
@@ -32,7 +36,15 @@ nonisolated enum HestrelAPIError: LocalizedError, Equatable {
 }
 
 nonisolated extension HestrelAPIClient: DependencyKey {
-    static let baseURL = URL(string: "https://hestrel-api.hestrel-cloud.workers.dev")!
+    static let baseURL: URL = {
+        #if DEBUG
+        // Points a development build at a local `wrangler dev`, e.g. HESTREL_API_URL=http://127.0.0.1:8787/.
+        if let override = ProcessInfo.processInfo.environment["HESTREL_API_URL"].flatMap(URL.init(string:)) {
+            return override
+        }
+        #endif
+        return URL(string: "https://hestrel-api.hestrel-cloud.workers.dev/")!
+    }()
 
     static let liveValue: HestrelAPIClient = {
         @Sendable func send(
@@ -90,6 +102,16 @@ nonisolated extension HestrelAPIClient: DependencyKey {
             pull: { token, cursor in
                 let data = try await send("GET", "v1/sync/pull?cursor=\(cursor)&limit=\(pullPageSize)", token: token)
                 return try decode(PullResponse.self, from: data)
+            },
+            listComputers: { token in
+                struct Response: Decodable { let computers: [Computer] }
+                return try decode(Response.self, from: try await send("GET", "v1/computers", token: token)).computers
+            },
+            claimComputer: { token, code in
+                try decode(Computer.self, from: try await send("POST", "v1/computers/claim", token: token, body: ["code": code]))
+            },
+            removeComputer: { token, id in
+                _ = try await send("DELETE", "v1/computers/\(id.uuidString.lowercased())", token: token)
             }
         )
     }()

@@ -7,6 +7,17 @@ nonisolated struct MCPClient: Sendable {
     var discoverServers: @Sendable (_ configURL: String) async throws -> MCPHostConfig.Discovery
     var listTools: @Sendable (_ server: MCPServer, _ headers: [String: String]) async throws -> [MCPTool]
     var callTool: @Sendable (_ server: MCPServer, _ headers: [String: String], _ name: String, _ arguments: String) async throws -> ToolResult
+    /// Runs a tool and streams the server's notifications until its result arrives. Cancelling cancels the call on the server.
+    var streamTool: @Sendable (_ server: MCPServer, _ headers: [String: String], _ name: String, _ arguments: JSONValue) -> AsyncThrowingStream<MCPToolEvent, any Error> = { _, _, _, _ in .finished() }
+    /// Picks up a tool call's stream from the start, e.g. after the app was relaunched mid-call.
+    var resumeTool: @Sendable (_ server: MCPServer, _ headers: [String: String], _ streamID: String) -> AsyncThrowingStream<MCPToolEvent, any Error> = { _, _, _ in .finished() }
+}
+
+nonisolated enum MCPToolEvent: Equatable, Sendable {
+    case notification(MCPNotification)
+    /// The call can be picked up again by this stream ID, should the app be relaunched before it finishes.
+    case resumable(streamID: String)
+    case result(ToolResult)
 }
 
 nonisolated extension MCPClient: DependencyKey {
@@ -28,6 +39,28 @@ nonisolated extension MCPClient: DependencyKey {
             }
         }
 
+        @Sendable func stream(
+            _ call: @escaping @Sendable (_ onEvent: @escaping @Sendable (MCPStreamEvent) -> Void) async throws -> ToolResult
+        ) -> AsyncThrowingStream<MCPToolEvent, any Error> {
+            AsyncThrowingStream { continuation in
+                let task = Task {
+                    do {
+                        let result = try await call { event in
+                            switch event {
+                            case let .notification(notification): continuation.yield(.notification(notification))
+                            case let .resumable(streamID): continuation.yield(.resumable(streamID: streamID))
+                            }
+                        }
+                        continuation.yield(.result(result))
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
+                }
+                continuation.onTermination = { _ in task.cancel() }
+            }
+        }
+
         return MCPClient(
             discoverServers: { configURL in
                 let url = try Endpoint.url(configURL)
@@ -41,6 +74,17 @@ nonisolated extension MCPClient: DependencyKey {
             callTool: { server, headers, name, arguments in
                 try await connection(for: server, headers: headers)
                     .callTool(name: name, arguments: JSONValue(json: arguments) ?? .emptyObject)
+            },
+            streamTool: { server, headers, name, arguments in
+                stream { onEvent in
+                    try await connection(for: server, headers: headers).callTool(name: name, arguments: arguments, onEvent: onEvent)
+                }
+            },
+            resumeTool: { server, headers, streamID in
+                stream { onEvent in
+                    // `-1`: from the stream's first event, so the reply is rebuilt whole.
+                    try await connection(for: server, headers: headers).resumeToolCall(lastEventID: "\(streamID):-1", onEvent: onEvent)
+                }
             }
         )
     }()
@@ -54,6 +98,12 @@ nonisolated extension MCPClient: DependencyKey {
         },
         callTool: { _, _, _, _ in
             ToolResult(content: "Sunny, 22°C", isError: false)
+        },
+        streamTool: { _, _, _, _ in
+            AsyncThrowingStream { $0.yield(.result(ToolResult(content: "Done.", isError: false))); $0.finish() }
+        },
+        resumeTool: { _, _, _ in
+            AsyncThrowingStream { $0.yield(.result(ToolResult(content: "Done.", isError: false))); $0.finish() }
         }
     )
 

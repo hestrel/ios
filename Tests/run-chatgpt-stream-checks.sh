@@ -7,7 +7,7 @@ mkdir -p "$check_dir/Sources/StreamAdapter" "$check_dir/Tests/StreamAdapterTests
 cp "$repo_root/hestrel-ios/Core/Clients/LLM/Services/ChatGPTSearchStreamMiddleware.swift" "$check_dir/Sources/StreamAdapter/"
 cp "$repo_root/hestrel-ios/Core/Clients/LLM/Services/ChatGPTStreamOutput.swift" "$check_dir/Sources/StreamAdapter/"
 cp "$repo_root/hestrel-ios/Core/Models/ToolCall.swift" "$repo_root/hestrel-ios/Core/Models/JSONValue.swift" "$check_dir/Sources/StreamAdapter/"
-for source in Provider ProviderKind ChatModel ModelCatalog LoadStatus GoogleConnection ToolCatalog MCPServer; do
+for source in Provider ProviderKind ChatModel ModelCatalog LoadStatus GoogleConnection ToolCatalog MCPServer Connector; do
     cp "$repo_root/hestrel-ios/Core/Models/$source.swift" "$check_dir/Sources/StreamAdapter/"
 done
 cp "$repo_root/hestrel-ios/Core/Extensions/String+Trimming.swift" "$check_dir/Sources/StreamAdapter/"

@@ -79,3 +79,16 @@ extension SharedKey where Self == AppStorageKey<Bool>.Default {
         Self[.appStorage("webSearchEnabled"), default: true]
     }
 }
+
+nonisolated extension SharedKey where Self == FileStorageKey<CodeDefaults>.Default {
+    static var codeDefaults: Self {
+        Self[.fileStorage(.documentsDirectory.appending(component: "code-defaults.json")), default: CodeDefaults()]
+    }
+}
+
+extension SharedKey where Self == InMemoryKey<IdentifiedArrayOf<Computer>>.Default {
+    /// Computers paired with the account, with their online status, as last fetched.
+    static var computers: Self {
+        Self[.inMemory("computers"), default: []]
+    }
+}

@@ -13,7 +13,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		826649D53073F54B00C1DF42 /* hestrel-ios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "hestrel-ios.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		826649D53073F54B00C1DF42 /* Hestrel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hestrel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C02000000000000000000004 /* Config/Google.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Google.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -49,7 +49,7 @@
 		826649D63073F54B00C1DF42 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				826649D53073F54B00C1DF42 /* hestrel-ios.app */,
+				826649D53073F54B00C1DF42 /* Hestrel.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -85,7 +85,7 @@
 				826649E43073F57A00C1DF42 /* ComposableArchitecture */,
 			);
 			productName = "hestrel-ios";
-			productReference = 826649D53073F54B00C1DF42 /* hestrel-ios.app */;
+			productReference = 826649D53073F54B00C1DF42 /* Hestrel.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -292,7 +292,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "me.jach.hestrel-ios";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Hestrel;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -330,7 +330,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "me.jach.hestrel-ios";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Hestrel;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;

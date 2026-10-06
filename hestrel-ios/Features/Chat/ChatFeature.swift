@@ -13,6 +13,9 @@ struct ChatFeature {
         var openSettingsAfterModelPicker = false
         var draftAttachments: [Attachment] = []
         var isProcessingAttachments = false
+        /// Models of the harnesses the bridge offers, by agent ID, fetched when the settings sheet opens.
+        var harnessModels: [String: [CodeModel]] = [:]
+        var loadingModelsFor: String?
         /// Replies being generated, keyed by conversation. They keep going when another chat is opened.
         var responses: [Conversation.ID: ActiveResponse] = [:]
         @Presents var alert: AlertState<Action.Alert>?
@@ -27,6 +30,7 @@ struct ChatFeature {
         @Shared(.mcpServers) var mcpServers: IdentifiedArrayOf<MCPServer>
         @Shared(.toolCatalog) var toolCatalog: ToolCatalog
         @Shared(.googleConnection) var googleConnection: GoogleConnection
+        @Shared(.codeDefaults) var codeDefaults: CodeDefaults
 
         init(conversationID: Conversation.ID? = nil) {
             self.conversationID = conversationID
@@ -74,7 +78,7 @@ struct ChatFeature {
 
         var providerMCPServers: [MCPServer] {
             guard let provider = selectedProvider else { return [] }
-            return mcpServers.filter { $0.providerID == provider.id }
+            return mcpServers.filter { $0.isAvailable(to: provider.id) }
         }
 
         /// The reply streaming into the open conversation, if any.
@@ -85,16 +89,99 @@ struct ChatFeature {
         var isStreaming: Bool { streamingMessageID != nil }
 
         var canSend: Bool {
-            (draft.nonBlank != nil || !draftAttachments.isEmpty) && !isStreaming && !isProcessingAttachments
+            guard !isStreaming, !isProcessingAttachments else { return false }
+            // Coding agents take text only.
+            return draft.nonBlank != nil || (kind == .chat && !draftAttachments.isEmpty)
+        }
+
+        /// Agents some enabled server offers, Codex and Claude Code first.
+        var availableCodeAgents: [CodeAgent] {
+            var agents: [CodeAgent] = []
+            for server in mcpServers where server.isEnabled {
+                for agent in toolCatalog.codeAgents(on: server.id) where !agents.contains(agent) {
+                    agents.append(agent)
+                }
+            }
+            return CodeAgent.builtIn.filter(agents.contains) + agents.filter { $0.kind == .harness }
+        }
+
+        /// Paired computers first: they're reachable from anywhere, unlike servers added by local address.
+        func codeServers(for agent: CodeAgent) -> [MCPServer] {
+            let servers = toolCatalog.serverIDs(offering: agent).compactMap { mcpServers[id: $0] }.filter(\.isEnabled)
+            return servers.filter { $0.origin == .computer } + servers.filter { $0.origin != .computer }
+        }
+
+        /// The session's agent once it exists; otherwise the remembered one, or whichever is connected.
+        var codeAgent: CodeAgent {
+            if let session = conversation?.codeSession { return session.agent }
+            let available = availableCodeAgents
+            // The connected agent's details (title, effort) are current; the remembered one may be from an older bridge.
+            if let remembered = available.first(where: { $0 == codeDefaults.agent }) { return remembered }
+            return available.first ?? codeDefaults.agent
+        }
+
+        /// The server running the session's agent: its own while it's still on, otherwise the first one offering the agent.
+        var codeServer: MCPServer? {
+            let servers = codeServers(for: codeAgent)
+            if let own = conversation?.codeSession?.serverID, let server = servers.first(where: { $0.id == own }) {
+                return server
+            }
+            return servers.first
+        }
+
+        /// Folder, model and effort: the session's once it exists, otherwise the ones new sessions use.
+        var codeFolder: String {
+            conversation?.codeSession?.folder ?? codeDefaults.folder
+        }
+
+        var codeModel: String? {
+            conversation?.codeSession.map(\.model) ?? codeDefaults.model(for: codeAgent)
+        }
+
+        var codeEffort: ReasoningEffort {
+            conversation?.codeSession?.effort ?? codeDefaults.effort
+        }
+
+        /// Codex runs on the user's ChatGPT account, whose catalog the ChatGPT provider already lists;
+        /// Claude Code takes model aliases; other harnesses list theirs through the bridge.
+        var codeModels: [CodeModel] {
+            switch codeAgent.kind {
+            case .codex:
+                providers
+                    .filter { $0.isEnabled && $0.kind == .openAI }
+                    .flatMap { catalog.models(for: $0.id) }
+                    .map { CodeModel(id: $0.name, title: $0.displayName) }
+            case .claudeCode:
+                CodeAgent.claudeModels
+            case .harness:
+                harnessModels[codeAgent.id] ?? []
+            }
+        }
+
+        /// The chosen model's name, or the agent's when it uses its own default.
+        var codeModelTitle: String {
+            guard let codeModel else { return codeAgent.title }
+            return codeModels.first { $0.id == codeModel }?.title ?? codeModel
+        }
+
+        /// Agent, folder, model and effort can only be chosen before the session starts.
+        var canChangeCodeSettings: Bool {
+            conversation?.codeSession?.threadID == nil && !isStreaming
         }
     }
 
     /// A reply in progress: the assistant message it streams into and the model producing it.
     struct ActiveResponse: Equatable {
         var messageID: Message.ID
-        let model: ChatModel
+        /// `nil` for coding agents, which run their own models.
+        let model: ChatModel?
         /// Model → tool → model round-trips so far, to stop runaway loops.
         var toolRounds = 0
+        /// The agent message streaming in, and the reply text before it.
+        var agentTextItemID: String?
+        var agentTextPrefix = ""
+        /// "Codex · GPT-6-Astra", once the agent reports its model.
+        var agentModelName: String?
     }
 
     struct ModelGroup: Identifiable {
@@ -109,6 +196,15 @@ struct ChatFeature {
         case attachmentsAdded([Attachment])
         case attachmentsFailed(String)
         case binding(BindingAction<State>)
+        case agentEvent(AgentEvent, in: Conversation.ID)
+        case agentFinished(ToolResult, in: Conversation.ID)
+        case agentResumable(streamID: String, in: Conversation.ID)
+        case codeAgentSelected(CodeAgent)
+        case codeSettingsAppeared
+        case harnessModelsLoaded(agentID: String, [CodeModel])
+        case codeEffortSelected(ReasoningEffort)
+        case codeFolderChanged(String)
+        case codeModelSelected(String?)
         case conversationRemoved(Conversation.ID)
         case delegate(Delegate)
         case effortSelected(ReasoningEffort)
@@ -118,8 +214,13 @@ struct ChatFeature {
         case modelPickerTapped
         case modelSelected(String)
         case open(Conversation.ID)
+        case openPluginsTapped
         case openSettingsTapped
+        case pairComputerTapped
+        case setupAppeared
         case regenerateTapped
+        /// Picks up the replies of code sessions whose turns were still running when the app last quit.
+        case resumePendingTurns
         case sendTapped
         case startNewConversation(Conversation.Kind)
         case stopTapped
@@ -128,16 +229,21 @@ struct ChatFeature {
         case streamFinished(Conversation.ID)
         case suggestionTapped(String)
         case titleGenerated(String, for: Conversation.ID)
-        case toolCallFinished(id: ToolCall.ID, ToolResult, in: Conversation.ID)
+        case toolCallFinished(id: ToolCall.ID, ToolResult, server: String?, in: Conversation.ID)
         case toolCallsFinished(Conversation.ID)
 
         enum Alert: Equatable {
+            case openPlugins
             case openSettings
+            case pairComputer
         }
 
         enum Delegate: Equatable {
             case conversationStarted(Conversation.ID)
+            case openPlugins
             case openSettings
+            case pairComputer
+            case refreshComputers
         }
     }
 
@@ -155,6 +261,7 @@ struct ChatFeature {
     @Dependency(\.date.now) var now
     @Dependency(\.llm) var llm
     @Dependency(\.mcp) var mcp
+    @Dependency(\.mcpAuth) var mcpAuth
     @Dependency(\.google) var google
     @Dependency(\.webSearch) var webSearch
     @Dependency(\.uuid) var uuid
@@ -165,6 +272,74 @@ struct ChatFeature {
             switch action {
             case .alert(.presented(.openSettings)), .openSettingsTapped:
                 return .send(.delegate(.openSettings))
+
+            case .alert(.presented(.openPlugins)), .openPluginsTapped:
+                return .send(.delegate(.openPlugins))
+
+            case .alert(.presented(.pairComputer)), .pairComputerTapped:
+                return .send(.delegate(.pairComputer))
+
+            case .setupAppeared:
+                // A paired computer may have come online since the list was last fetched.
+                return .send(.delegate(.refreshComputers))
+
+            case let .agentEvent(event, conversationID):
+                applyAgentEvent(event, in: conversationID, state: &state)
+                return .none
+
+            case let .agentFinished(result, conversationID):
+                finishAgentResponse(result, in: conversationID, state: &state)
+                return .none
+
+            case let .agentResumable(streamID, conversationID):
+                guard state.responses[conversationID] != nil else { return .none }
+                state.$conversations.withLock { $0[id: conversationID]?.codeSession?.pendingStreamID = streamID }
+                return .none
+
+            case .resumePendingTurns:
+                let pending = state.conversations.filter { $0.codeSession?.pendingStreamID != nil && state.responses[$0.id] == nil }
+                return .merge(pending.map { reattachAgentResponse(&state, in: $0.id) })
+
+            case let .codeAgentSelected(agent):
+                guard state.canChangeCodeSettings else { return .none }
+                state.$codeDefaults.withLock { $0.agent = agent }
+                let model = state.codeDefaults.model(for: agent)
+                let server = state.codeServers(for: agent).first
+                updateCodeSession(state: &state) { session in
+                    guard session.agent != agent else { return }
+                    session.agent = agent
+                    session.model = model
+                    if let server { session.serverID = server.id }
+                }
+                return loadHarnessModels(&state)
+
+            case .codeSettingsAppeared:
+                return loadHarnessModels(&state)
+
+            case let .harnessModelsLoaded(agentID, models):
+                if state.loadingModelsFor == agentID { state.loadingModelsFor = nil }
+                state.harnessModels[agentID] = models
+                return .none
+
+            case let .codeEffortSelected(effort):
+                guard state.canChangeCodeSettings else { return .none }
+                state.$codeDefaults.withLock { $0.effort = effort }
+                updateCodeSession(state: &state) { $0.effort = effort }
+                return .none
+
+            case let .codeModelSelected(model):
+                guard state.canChangeCodeSettings else { return .none }
+                let agent = state.codeAgent
+                state.$codeDefaults.withLock { $0.models[agent.id] = model }
+                updateCodeSession(state: &state) { $0.model = model }
+                return .none
+
+            case let .codeFolderChanged(folder):
+                guard state.canChangeCodeSettings else { return .none }
+                let folder = folder.trimmed
+                state.$codeDefaults.withLock { $0.folder = folder }
+                updateCodeSession(state: &state) { $0.folder = folder }
+                return .none
 
             case .alert, .binding, .delegate:
                 return .none
@@ -250,10 +425,25 @@ struct ChatFeature {
                         $0.role == .assistant && $0.createdAt >= lastPrompt.createdAt
                     }
                 }
-                return startResponse(&state, in: conversationID)
+                return state.kind == .code
+                    ? startAgentResponse(&state, in: conversationID)
+                    : startResponse(&state, in: conversationID)
 
             case .sendTapped:
                 guard state.canSend else { return .none }
+                if state.kind == .code {
+                    guard state.codeServer != nil else {
+                        state.alert = .codeAgentNotConnected
+                        return .none
+                    }
+                    let prompt = state.draft.trimmed
+                    state.draft = ""
+                    let (conversationID, isNew) = appendUserMessage(prompt, attachments: [], to: &state)
+                    return .merge(
+                        isNew ? .send(.delegate(.conversationStarted(conversationID))) : .none,
+                        startAgentResponse(&state, in: conversationID)
+                    )
+                }
                 guard state.selectedModel != nil else {
                     state.alert = .noModelAvailable
                     return .none
@@ -298,6 +488,7 @@ struct ChatFeature {
             case let .streamFailed(error, conversationID):
                 updateReply(in: conversationID, state: &state) { $0.errorDescription = error }
                 state.responses[conversationID] = nil
+                state.$conversations.withLock { $0[id: conversationID]?.codeSession?.pendingStreamID = nil }
                 return .none
 
             case let .streamFinished(conversationID):
@@ -306,7 +497,7 @@ struct ChatFeature {
                 let pendingCalls = reply(in: conversationID, state: state)?.toolCalls.filter { !$0.isHosted && $0.result == nil } ?? []
                 guard !pendingCalls.isEmpty else {
                     state.responses[conversationID] = nil
-                    return generateTitleIfNeeded(in: conversationID, model: response.model, state: state)
+                    return response.model.map { generateTitleIfNeeded(in: conversationID, model: $0, state: state) } ?? .none
                 }
                 guard response.toolRounds < Self.maxToolRounds else {
                     updateReply(in: conversationID, state: &state) { message in
@@ -328,10 +519,11 @@ struct ChatFeature {
                 state.$conversations.withLock { $0[id: conversationID]?.title = title }
                 return .none
 
-            case let .toolCallFinished(callID, result, conversationID):
+            case let .toolCallFinished(callID, result, serverName, conversationID):
                 updateReply(in: conversationID, state: &state) { message in
                     guard let index = message.toolCalls.firstIndex(where: { $0.id == callID }) else { return }
                     message.toolCalls[index].result = result
+                    message.toolCalls[index].serverName = message.toolCalls[index].serverName ?? serverName
                 }
                 return .none
 
@@ -389,11 +581,9 @@ struct ChatFeature {
             return .none
         }
         let effort = state.reasoningEffort
-        let systemPrompt = [conversation.kind.systemPrompt, state.systemPrompt.nonBlank]
-            .compactMap { $0 }
-            .joined(separator: "\n\n")
+        let systemPrompt = state.systemPrompt
         let history = conversation.messages.filter(\.isPartOfHistory)
-        let servers = state.mcpServers.filter { $0.providerID == provider.id && $0.isEnabled }
+        let servers = state.mcpServers.filter { $0.isAvailable(to: provider.id) && $0.isEnabled }
         let serverIDs = Set(servers.map(\.id))
         // Web search runs on the provider's servers where it can, and on this device everywhere else.
         let builtInWebSearch = state.webSearchEnabled && provider.kind.hasBuiltInWebSearch
@@ -402,7 +592,8 @@ struct ChatFeature {
             ? state.toolCatalog.tools.filter { serverIDs.contains($0.serverID) }.map(\.definition) : [])
             + state.googleConnection.tools
             + webTools
-        let hostedServers = provider.kind.mcpExecution == .hosted ? servers.filter(\.hasValidURL) : []
+        // The provider calls hosted servers itself, with their credentials; a paired computer's is the account session.
+        let hostedServers = provider.kind.mcpExecution == .hosted ? servers.filter { $0.hasValidURL && $0.origin != .computer } : []
 
         let reply = Message(id: uuid(), role: .assistant, modelName: model.displayName, createdAt: now)
         state.$conversations.withLock {
@@ -416,8 +607,18 @@ struct ChatFeature {
             toolRounds: isContinuation ? previous?.toolRounds ?? 0 : 0
         )
 
-        return .run { [attachments, backgroundTask, credentials, llm] send in
+        return .run { [attachments, backgroundTask, credentials, llm, mcpAuth] send in
             try await backgroundTask.run("Reply") {
+                // Fresh tokens for the MCP servers the provider will call itself.
+                var hostedMCPServers: [HostedMCPServer] = []
+                for server in hostedServers {
+                    guard let headers = try? await mcpAuth.headers(server: server) else { continue }
+                    hostedMCPServers.append(HostedMCPServer(
+                        name: ToolCatalog.sanitize(server.name),
+                        url: server.url.trimmed,
+                        headers: headers
+                    ))
+                }
                 let request = ChatRequest(
                     provider: provider,
                     apiKey: provider.kind == .openAI ? nil : credentials.secret(id: provider.id),
@@ -434,13 +635,7 @@ struct ChatFeature {
                     reasoningEffort: provider.kind.supportsReasoningEffort ? effort : .auto,
                     webSearchEnabled: builtInWebSearch,
                     tools: tools,
-                    hostedMCPServers: hostedServers.map { server in
-                        HostedMCPServer(
-                            name: ToolCatalog.sanitize(server.name),
-                            url: server.url.trimmed,
-                            headers: server.authHeaders(token: credentials.secret(id: server.id))
-                        )
-                    }
+                    hostedMCPServers: hostedMCPServers
                 )
                 for try await event in llm.streamChat(request: request) {
                     await send(.streamEvent(event, in: conversationID))
@@ -459,7 +654,7 @@ struct ChatFeature {
             let tool = state.toolCatalog.tools[id: call.name]
             return (call: call, tool: tool, server: tool.flatMap { state.mcpServers[id: $0.serverID] })
         }
-        return .run { [backgroundTask, credentials, mcp, google, webSearch] send in
+        return .run { [backgroundTask, mcp, mcpAuth, google, webSearch] send in
             try await backgroundTask.run("Tools") {
                 for invocation in invocations {
                     let result: ToolResult
@@ -479,7 +674,7 @@ struct ChatFeature {
                         do {
                             result = try await mcp.callTool(
                                 server: server,
-                                headers: server.authHeaders(token: credentials.secret(id: server.id)),
+                                headers: mcpAuth.headers(server: server),
                                 name: tool.name,
                                 arguments: invocation.call.arguments
                             )
@@ -489,7 +684,7 @@ struct ChatFeature {
                     } else {
                         result = ToolResult(content: "Tool “\(invocation.call.name)” is not available.", isError: true)
                     }
-                    await send(.toolCallFinished(id: invocation.call.id, result, in: conversationID))
+                    await send(.toolCallFinished(id: invocation.call.id, result, server: invocation.server?.name, in: conversationID))
                 }
             }
             await send(.toolCallsFinished(conversationID))
@@ -527,12 +722,12 @@ struct ChatFeature {
     }
 
     /// The assistant message a conversation's reply is streaming into.
-    private func reply(in conversationID: Conversation.ID, state: State) -> Message? {
+    func reply(in conversationID: Conversation.ID, state: State) -> Message? {
         guard let messageID = state.responses[conversationID]?.messageID else { return nil }
         return state.conversations[id: conversationID]?.messages[id: messageID]
     }
 
-    private func updateReply(in conversationID: Conversation.ID, state: inout State, _ update: (inout Message) -> Void) {
+    func updateReply(in conversationID: Conversation.ID, state: inout State, _ update: (inout Message) -> Void) {
         guard let messageID = state.responses[conversationID]?.messageID else { return }
         state.$conversations.withLock { conversations in
             guard var message = conversations[id: conversationID]?.messages[id: messageID] else { return }
@@ -542,11 +737,12 @@ struct ChatFeature {
     }
 
     /// Ends a conversation's reply, discarding it if nothing arrived yet.
-    private func finishResponse(in conversationID: Conversation.ID, state: inout State) {
+    func finishResponse(in conversationID: Conversation.ID, state: inout State) {
+        state.$conversations.withLock { $0[id: conversationID]?.codeSession?.pendingStreamID = nil }
         guard let messageID = state.responses.removeValue(forKey: conversationID)?.messageID else { return }
         state.$conversations.withLock { conversations in
             guard let message = conversations[id: conversationID]?.messages[id: messageID],
-                  message.content.isEmpty, message.reasoning.isEmpty, message.toolCalls.isEmpty
+                  message.content.isEmpty, message.reasoning.isEmpty, message.toolCalls.isEmpty, message.errorDescription == nil
             else { return }
             conversations[id: conversationID]?.messages.remove(id: messageID)
         }
@@ -586,5 +782,18 @@ extension AlertState where Action == ChatFeature.Action.Alert {
         }
     } message: {
         TextState("Connect a provider in Settings to start chatting.")
+    }
+
+    static let codeAgentNotConnected = AlertState {
+        TextState("No Coding Agent Connected")
+    } actions: {
+        ButtonState(action: .pairComputer) {
+            TextState("Pair a Computer")
+        }
+        ButtonState(role: .cancel) {
+            TextState("Cancel")
+        }
+    } message: {
+        TextState("Run Hestrel’s bridge on your computer and pair it, or check that a paired computer is online.")
     }
 }

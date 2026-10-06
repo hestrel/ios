@@ -11,7 +11,14 @@ struct HestrelApp: App {
     var body: some Scene {
         WindowGroup {
             AppView(store: Self.store)
-                .onOpenURL { GIDSignIn.sharedInstance.handle($0) }
+                .onOpenURL { url in
+                    // `hestrel://pair?code=…` from a bridge's QR code; everything else is Google sign-in.
+                    if url.scheme?.lowercased() == "hestrel" {
+                        Self.store.send(.openURL(url))
+                    } else {
+                        GIDSignIn.sharedInstance.handle(url)
+                    }
+                }
         }
     }
 }
