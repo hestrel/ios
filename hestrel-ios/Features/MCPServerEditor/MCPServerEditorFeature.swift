@@ -12,10 +12,10 @@ struct MCPServerEditorFeature {
         @Shared(.providers) var providers: IdentifiedArrayOf<Provider>
 
         /// Servers inherited from a host are configured on the host, not here.
-        var isReadOnly: Bool { server.origin == .host }
+        var isReadOnly: Bool { server.origin != .manual }
 
         var canSave: Bool {
-            server.name.nonBlank != nil && server.hasValidURL && providers[id: server.providerID] != nil
+            server.name.nonBlank != nil && server.hasValidURL && (server.providerID.map { providers[id: $0] != nil } ?? true)
         }
     }
 

@@ -156,7 +156,7 @@ struct SettingsFeature {
     }
 
     private func removeProviders(_ ids: [Provider.ID], from state: inout State) -> Effect<Action> {
-        let orphanedServers = state.mcpServers.filter { ids.contains($0.providerID) }.map(\.id)
+        let orphanedServers = state.mcpServers.filter { server in server.providerID.map(ids.contains) ?? false }.map(\.id)
         state.$providers.withLock { providers in
             ids.forEach { providers.remove(id: $0) }
         }

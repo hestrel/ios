@@ -52,8 +52,8 @@ struct PluginDetailView: View {
                     ))
                     .tint(.toggleTint)
                     LabeledContent("URL", value: server.url)
-                    LabeledContent("Provider", value: store.providers[id: server.providerID]?.name ?? "—")
-                    LabeledContent("Source", value: server.origin == .host ? "Host configuration" : "Added manually")
+                    LabeledContent("Provider", value: server.providerID.flatMap { store.providers[id: $0]?.name } ?? "All providers")
+                    LabeledContent("Source", value: server.connector != nil ? "Connector" : server.origin == .host ? "Host configuration" : server.origin == .computer ? "Paired computer" : "Added manually")
                     if case let .failed(message) = store.toolCatalog.statuses[server.id] {
                         Text(message)
                             .foregroundStyle(.secondary)
@@ -81,8 +81,10 @@ struct PluginDetailView: View {
             .navigationTitle(server.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(server.origin == .host ? "Configuration" : "Edit") { store.send(.editTapped) }
+                if server.connector == nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(server.origin == .host ? "Configuration" : "Edit") { store.send(.editTapped) }
+                    }
                 }
             }
         } else {

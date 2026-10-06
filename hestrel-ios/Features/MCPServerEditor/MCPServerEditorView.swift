@@ -10,15 +10,18 @@ struct MCPServerEditorView: View {
                 TextField("Name", text: $store.server.name)
                     .autocorrectionDisabled()
                 Picker("Provider", selection: $store.server.providerID) {
+                    Text("All providers").tag(Provider.ID?.none)
                     ForEach(store.providers) { provider in
-                        Text(provider.name).tag(provider.id)
+                        Text(provider.name).tag(Provider.ID?.some(provider.id))
                     }
                 }
                 Toggle("Enabled", isOn: $store.server.isEnabled)
                     .tint(.toggleTint)
             } footer: {
-                if let provider = store.providers[id: store.server.providerID] {
+                if let provider = store.server.providerID.flatMap({ store.providers[id: $0] }) {
                     Text(provider.kind.mcpExecutionDescription)
+                } else {
+                    Text("Available in every chat. Anthropic connects to the server itself; with other providers, Hestrel calls the tools on this device.")
                 }
             }
             .disabled(store.isReadOnly)

@@ -37,12 +37,7 @@ struct ConnectionsView: View {
 
     private func accountRow(email: String) -> some View {
         HStack(spacing: Theme.Spacing.medium) {
-            Image(.googleLogo)
-                .resizable()
-                .frame(width: 20, height: 20)
-                .frame(width: 32, height: 32)
-                .background(.white, in: .rect(cornerRadius: 8))
-                .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(Color.hairline) }
+            LogoTile(image: Image(.googleLogo))
             Text(email)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -63,10 +58,7 @@ struct ConnectionsView: View {
         let isGranted = store.connection.userID != nil && store.connection.grantedScopes.contains(service.scope)
 
         return HStack(spacing: Theme.Spacing.medium) {
-            GoogleServiceLogo(service: service, size: 22)
-                .frame(width: 32, height: 32)
-                .background(.white, in: .rect(cornerRadius: 8))
-                .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(Color.hairline) }
+            LogoTile(image: Image(service.logo))
             VStack(alignment: .leading, spacing: 1) {
                 Text(service.title)
                 Text(service.detail)
